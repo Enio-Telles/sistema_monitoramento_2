@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+ENV/
+
+# Data (CRITICAL: Private tax data)
+CNPJ/
+**/CNPJ/
+*.parquet
+*.xlsx
+*.csv
+*.sql
+!consultas_fonte/*.sql
+
+# IDE
+.vscode/
+.idea/
+
+# System
+.DS_Store
+Thumbs.db
