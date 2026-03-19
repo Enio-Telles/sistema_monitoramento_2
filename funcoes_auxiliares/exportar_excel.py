@@ -14,7 +14,13 @@ def exportar_excel(df, nome_base, diretorio_saida: Path):
         nome_base: Nome base do arquivo (sem extensão)
         diretorio_saida: Path object apontando para a pasta onde salvar
     """
-    if df.height == 0 if hasattr(df, "height") else df.empty:
+    is_empty = False
+    if hasattr(df, "height"):
+        is_empty = df.height == 0
+    else:
+        is_empty = bool(df.empty)
+
+    if is_empty:
         rprint("[yellow]=> Sem resultados. Arquivo Excel não gerado.[/yellow]")
         return None
     
@@ -32,4 +38,3 @@ def exportar_excel(df, nome_base, diretorio_saida: Path):
     rprint(f"[green]   => Relatório Excel exportado:[/green] {arquivo_excel.name}")
     
     return arquivo_excel
-

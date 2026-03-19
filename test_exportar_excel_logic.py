@@ -3,11 +3,7 @@ from unittest.mock import MagicMock, call, patch
 import sys
 from pathlib import Path
 
-# Mocking the missing dependencies before importing the module
-mock_pd = MagicMock()
-mock_pd.api.types.is_object_dtype.return_value = False
-sys.modules["pandas"] = mock_pd
-sys.modules["rich"] = MagicMock()
+
 
 # Import the module under test
 import funcoes_auxiliares.exportar_excel_adaptado as export_module

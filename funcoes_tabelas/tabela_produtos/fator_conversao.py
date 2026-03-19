@@ -75,6 +75,47 @@ def _gerar_chave(df: pl.DataFrame) -> pl.DataFrame:
 
 
 
+
+def gerar_template_fatores_manuais(pasta_saida: Path) -> bool:
+    """Gera um template Excel vazio para insercao manual de fatores de conversao."""
+    cols = ["chave_produto", "codigo", "descricao", "unidade", "ano", "fator_conversao_manual", "justificativa"]
+    df_template = pl.DataFrame(schema={c: pl.String for c in cols})
+    arquivo_saida = pasta_saida / "template_fatores_manuais.xlsx"
+    try:
+        df_template.write_excel(arquivo_saida)
+        rprint(f"[green]Template para fatores manuais gerado em: {arquivo_saida}[/green]")
+        return True
+    except Exception as e:
+        rprint(f"[red]Erro ao gerar template Excel: {e}[/red]")
+        return False
+
+
+def ler_fatores_manuais(arquivo_excel: Path) -> pl.DataFrame | None:
+    """Lê a planilha de fatores de conversão manuais, se existir."""
+    if not arquivo_excel.exists():
+        return None
+    try:
+        df_manual = pl.read_excel(arquivo_excel)
+        # Garantir colunas essenciais
+        cols_essenciais = ["chave_produto", "unidade", "ano", "fator_conversao_manual"]
+        for col in cols_essenciais:
+            if col not in df_manual.columns:
+                rprint(f"[red]Planilha manual não contém a coluna obrigatória: {col}[/red]")
+                return None
+
+        # Tipar e filtrar nulos
+        df_manual = df_manual.with_columns([
+            pl.col("chave_produto").cast(pl.String),
+            pl.col("unidade").cast(pl.String),
+            pl.col("ano").cast(pl.String),
+            pl.col("fator_conversao_manual").cast(pl.Float64)
+        ]).drop_nulls(subset=["fator_conversao_manual", "chave_produto", "unidade", "ano"])
+
+        return df_manual
+    except Exception as e:
+        rprint(f"[red]Erro ao ler planilha de fatores manuais ({arquivo_excel}): {e}[/red]")
+        return None
+
 def _agrupar_por_produto_ano(df_vols: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Agrupa os volumes por produto, unidade e ano para calcular médias e definir unidade padrão."""
     # 5. Agrupar por (chave_produto, unidade, ano) para calcular médias
@@ -227,10 +268,37 @@ def calcular_fator_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
 
     # 7. Join para calcular fator em relação à unid_padrao
     df_final = _calcular_fator_final(df_fator, df_aggr)
+
+    # 7.1. Mesclar com fatores manuais (se houver)
+    arquivo_manual = pasta_produtos / f"fatores_manuais_{cnpj}.xlsx"
+    df_manual = ler_fatores_manuais(arquivo_manual)
+
+    if df_manual is not None:
+        rprint(f"[yellow]Aplicando fatores de conversão manuais encontrados em: {arquivo_manual.name}[/yellow]")
+        # Garantir mesmo tipo de dados para join
+        df_manual = df_manual.select(["chave_produto", "unidade", "ano", "fator_conversao_manual"])
+        df_final = df_final.join(df_manual, on=["chave_produto", "unidade", "ano"], how="left")
+        df_final = df_final.with_columns([
+            pl.when(pl.col("fator_conversao_manual").is_not_null())
+              .then(pl.col("fator_conversao_manual"))
+              .otherwise(pl.col("fator_conversao"))
+              .alias("fator_conversao"),
+            pl.when(pl.col("fator_conversao_manual").is_not_null())
+              .then(pl.lit("manual"))
+              .otherwise(pl.lit("automático"))
+              .alias("fonte_fator")
+        ]).drop("fator_conversao_manual")
+    else:
+        # Se não houver, tudo é automático
+        df_final = df_final.with_columns(pl.lit("automático").alias("fonte_fator"))
+
     # 8. Salvar
     nome_saida = f"fator_conversao_{cnpj}.parquet"
     ok = salvar_para_parquet(df_final, pasta_produtos, nome_saida)
     
+    # 9. Gerar template sempre
+    gerar_template_fatores_manuais(pasta_produtos)
+
     return ok
 
 
