@@ -120,7 +120,8 @@ def ler_c170(path: Path | None, cfop_df: pl.DataFrame | None = None, ano_padrao:
 
     lf = pl.scan_parquet(path)
     if "ind_oper" in schema:
-        lf = lf.filter(pl.col("ind_oper") == "0") # Entrada
+        # C170 can be Entrada (0) or Saida (1)
+        lf = lf.filter(pl.col("ind_oper").is_in(["0", "1"]))
 
     if cfop_df is not None and "co_cfop" in schema:
         lf = lf.with_columns(pl.col("co_cfop").cast(pl.String))
@@ -134,11 +135,13 @@ def ler_c170(path: Path | None, cfop_df: pl.DataFrame | None = None, ano_padrao:
     def _val(col):
         return pl.col(col).fill_null(0).cast(pl.Float64) if col in df.columns else pl.lit(0.0)
 
+    # Note: col_map renamed valor_item to valor_entrada and qtd to quantidade_entrada.
+    # We must fix this to be conditional based on ind_oper.
     df = df.with_columns([
-        _val("valor_entrada").alias("valor_entrada"),
-        _val("quantidade_entrada").alias("quantidade_entrada"),
-        pl.lit(0.0).alias("valor_saida"),
-        pl.lit(0.0).alias("quantidade_saida"),
+        pl.when(pl.col("ind_oper") == "0").then(_val("valor_entrada")).otherwise(0.0).alias("valor_entrada"),
+        pl.when(pl.col("ind_oper") == "0").then(_val("quantidade_entrada")).otherwise(0.0).alias("quantidade_entrada"),
+        pl.when(pl.col("ind_oper") == "1").then(_val("valor_entrada")).otherwise(0.0).alias("valor_saida"),
+        pl.when(pl.col("ind_oper") == "1").then(_val("quantidade_entrada")).otherwise(0.0).alias("quantidade_saida"),
         pl.lit(ano_padrao).alias("ano")
     ])
 
