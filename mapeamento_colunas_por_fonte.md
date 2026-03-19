@@ -62,9 +62,7 @@ Verificar que o arquivo `analises\tabela_itens_caracteristicas_37671507000187.pa
 SSS
 
 
-***No projeto localizado em:***
-
-C:\Users\03002693901\OneDrive - SECRETARIA DE ESTADO DE FINANCAS\Desenvolvimento\sistema_monitoramento
+***No projeto localizado no diretório do sistema de monitoramento,***
 
 reaproveite a interface gráfica já existente como base principal da solução. Expanda essa interface para que ela permita executar consultas, visualizar resultados e exportar as tabelas geradas para Excel.
 
