@@ -410,20 +410,22 @@ def exportar_excel(
             worksheet.hide_gridlines(2)
 
         for col_idx, col_name in enumerate(df_pd.columns):
+            col_data = df_pd[col_name]
+            col_lower = str(col_name).strip().lower()
+            dtype_str = str(col_data.dtype).lower()
+
+            # Cabeçalho
             worksheet.write(0, col_idx, col_name, formatos["cabecalho"])
 
-        for col_idx, col_name in enumerate(df_pd.columns):
-            col_lower = str(col_name).strip().lower()
-            dtype_str = str(df_pd[col_name].dtype).lower()
-
+            # Formatação e largura da coluna
             largura = cfg["larguras_fixas"].get(col_lower)
             if largura is None:
                 if col_lower in cfg["wrap_cols"] or col_lower.startswith("lista_"):
-                    largura = _largura_auto(df_pd[col_name], col_name, minimo=16, maximo=42)
+                    largura = _largura_auto(col_data, col_name, minimo=16, maximo=42)
                 elif col_lower in cfg["texto_forcado"]:
-                    largura = _largura_auto(df_pd[col_name], col_name, minimo=12, maximo=28)
+                    largura = _largura_auto(col_data, col_name, minimo=12, maximo=28)
                 else:
-                    largura = _largura_auto(df_pd[col_name], col_name, minimo=10, maximo=30)
+                    largura = _largura_auto(col_data, col_name, minimo=10, maximo=30)
 
             fmt = _escolher_formato(col_lower, dtype_str, cfg, formatos)
             worksheet.set_column(col_idx, col_idx, largura, fmt)
