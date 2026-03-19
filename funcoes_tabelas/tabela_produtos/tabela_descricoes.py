@@ -75,19 +75,15 @@ def gerar_tabela_descricoes(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     if "fonte" in cols:
         agg_exprs.append(pl.col("fonte").flatten().unique().sort().alias("lista_fonte"))
 
-    def calcular_moda(lista):
-        if lista is None or len(lista) == 0:
-            return None
-        from collections import Counter
-        # Filtra nulos e vazios
-        limpos = [str(x).strip() for x in lista if x not in (None, "", [])]
-        if not limpos:
-            return None
-        counts = Counter(limpos)
-        max_freq = max(counts.values())
-        candidatos = [val for val, count in counts.items() if count == max_freq]
-        # Desempate: primeiro em ordem alfabética (natural_sort_key seria ideal, mas sorted básico resolve)
-        return sorted(candidatos)[0]
+    def calcular_moda_expr(col_name: str) -> pl.Expr:
+        return (
+            pl.col(col_name)
+            .list.drop_nulls()
+            .list.eval(pl.element().cast(pl.String).str.strip_chars())
+            .list.eval(pl.element().filter(pl.element() != ""))
+            .list.eval(pl.element().mode().sort().first())
+            .list.first()
+        )
 
     def gerar_chave_produto(lista_chaves):
         if lista_chaves is None or (hasattr(lista_chaves, "len") and lista_chaves.len() == 0) or len(lista_chaves) == 0:
@@ -100,12 +96,12 @@ def gerar_tabela_descricoes(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         df.group_by("descricao")
         .agg(agg_exprs)
         .with_columns([
-            pl.col("lista_ncm").map_elements(calcular_moda, return_dtype=pl.Utf8).alias("ncm_padrao"),
-            pl.col("lista_cest").map_elements(calcular_moda, return_dtype=pl.Utf8).alias("cest_padrao"),
-            pl.col("lista_gtin").map_elements(calcular_moda, return_dtype=pl.Utf8).alias("gtin_padrao"),
-            pl.col("lista_tipo_item").map_elements(calcular_moda, return_dtype=pl.Utf8).alias("tipo_item_padrao"),
-            pl.col("lista_unids").map_elements(calcular_moda, return_dtype=pl.Utf8).alias("unid_padrao"),
-            pl.col("lista_co_sefin_inferido").map_elements(calcular_moda, return_dtype=pl.Utf8).alias("co_sefin_agr"),
+            calcular_moda_expr("lista_ncm").alias("ncm_padrao"),
+            calcular_moda_expr("lista_cest").alias("cest_padrao"),
+            calcular_moda_expr("lista_gtin").alias("gtin_padrao"),
+            calcular_moda_expr("lista_tipo_item").alias("tipo_item_padrao"),
+            calcular_moda_expr("lista_unids").alias("unid_padrao"),
+            calcular_moda_expr("lista_co_sefin_inferido").alias("co_sefin_agr"),
             pl.col("lista_co_sefin_inferido").list.unique().list.len().gt(1).alias("co_sefin_agr_divergente"),
             pl.col("lista_chave_item_individualizado").map_elements(gerar_chave_produto, return_dtype=pl.Utf8).alias("chave_produto"),
             pl.lit(False).alias("verificado")
