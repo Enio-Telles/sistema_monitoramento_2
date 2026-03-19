@@ -328,8 +328,7 @@ def gerar_tabela_itens_caracteristicas(cnpj: str, pasta_cnpj: Path | None = None
             pl.col("quantidade_saida").sum().alias("qtd_saidas"),
             # Lista de unidades únicas e ordenadas
             pl.col("unidade")
-              .drop_nulls()
-              .filter(pl.col("unidade") != "")
+              .filter(pl.col("unidade").is_not_null() & (pl.col("unidade") != ""))
               .unique()
               .sort()
               .alias("lista_unidades"),
