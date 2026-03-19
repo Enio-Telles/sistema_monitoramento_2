@@ -279,17 +279,36 @@ def _calcular_fator_final(df_fator: pl.DataFrame, df_aggr: pl.DataFrame) -> pl.D
           .alias("_fator_sai"),
     ])
 
-    # Selecionar o fator mais adequado usando map_elements
+    # Selecionar o fator mais adequado usando expressões nativas (evita map_elements para melhor performance)
+    valid_ent = pl.col("_fator_ent").is_not_null() & (pl.col("_fator_ent") != 0) & ~pl.col("_fator_ent").is_nan() & ~pl.col("_fator_ent").is_infinite()
+    valid_sai = pl.col("_fator_sai").is_not_null() & (pl.col("_fator_sai") != 0) & ~pl.col("_fator_sai").is_nan() & ~pl.col("_fator_sai").is_infinite()
+
+    dist_ent = (pl.col("_fator_ent") - pl.col("_fator_ent").round(0)).abs()
+    dist_sai = (pl.col("_fator_sai") - pl.col("_fator_sai").round(0)).abs()
+
+    expr_fator = (
+        pl.when(valid_ent & valid_sai)
+          .then(
+              pl.when(dist_ent <= dist_sai)
+                .then(pl.col("_fator_ent"))
+                .otherwise(pl.col("_fator_sai"))
+          )
+          .when(valid_ent)
+          .then(pl.col("_fator_ent"))
+          .when(valid_sai)
+          .then(pl.col("_fator_sai"))
+          .otherwise(
+              # Fallback: se ambos forem invalidos, tenta usar o fator_sai se for um número válido (mesmo que seja zero, pois a função original permitia retornar zero para fator_sai)
+              pl.when(pl.col("_fator_sai").is_not_null() & ~pl.col("_fator_sai").is_nan() & ~pl.col("_fator_sai").is_infinite())
+                .then(pl.col("_fator_sai"))
+                .otherwise(pl.lit(None))
+          )
+    )
+
     df_final = df_final.with_columns(
         pl.when(pl.col("unidade") == pl.col("unid_padrao"))
           .then(pl.lit(1.0))
-          .otherwise(
-              pl.struct(["_fator_ent", "_fator_sai"])
-                .map_elements(
-                    lambda s: _escolher_fator_mais_redondo(s["_fator_ent"], s["_fator_sai"]),
-                    return_dtype=pl.Float64
-                )
-          )
+          .otherwise(expr_fator)
           .alias("fator_de_conversao")
     )
 
