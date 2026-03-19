@@ -7,14 +7,18 @@ dentro de sistema_monitoramento.
 """
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
 # Diretório onde reside o pacote fiscal_app
-SISTEMA_MONITORAMENTO = Path(
-    r"C:\Users\03002693901\OneDrive - SECRETARIA DE ESTADO DE FINANCAS"
-    r"\Desenvolvimento\sistema_monitoramento"
-)
+# Pode ser configurado via variável de ambiente SISTEMA_MONITORAMENTO
+SISTEMA_MONITORAMENTO_ENV = os.getenv("SISTEMA_MONITORAMENTO")
+if SISTEMA_MONITORAMENTO_ENV:
+    SISTEMA_MONITORAMENTO = Path(SISTEMA_MONITORAMENTO_ENV)
+else:
+    # Caso não configurado, tenta usar o diretório atual como fallback ou um caminho relativo
+    SISTEMA_MONITORAMENTO = Path(__file__).parent / "Sistema-Monitoramento"
 
 if str(SISTEMA_MONITORAMENTO) not in sys.path:
     sys.path.insert(0, str(SISTEMA_MONITORAMENTO))
