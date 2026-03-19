@@ -6,6 +6,7 @@ Script para agrupar produtos pela descrição normalizada e consolidar os demais
 
 import hashlib
 import sys
+from collections import Counter
 from pathlib import Path
 
 import polars as pl
@@ -23,6 +24,29 @@ try:
 except ImportError as e:
     rprint(f"[red]Erro ao importar módulos auxiliares:[/red] {e}")
     sys.exit(1)
+
+
+def calcular_moda(lista):
+    if lista is None or len(lista) == 0:
+        return None
+    # Filtra nulos e vazios
+    limpos = [str(x).strip() for x in lista if x not in (None, "", [])]
+    limpos = [x for x in limpos if x != ""]
+    if not limpos:
+        return None
+    counts = Counter(limpos)
+    max_freq = max(counts.values())
+    candidatos = [val for val, count in counts.items() if count == max_freq]
+    # Desempate: primeiro em ordem alfabética (natural_sort_key seria ideal, mas sorted básico resolve)
+    return sorted(candidatos)[0]
+
+
+def gerar_chave_produto(lista_chaves):
+    if lista_chaves is None or (hasattr(lista_chaves, "len") and lista_chaves.len() == 0) or len(lista_chaves) == 0:
+        return ""
+    # Ordena para garantir consistência e gera MD5
+    texto_chaves = "".join(sorted([str(c) for c in lista_chaves]))
+    return hashlib.md5(texto_chaves.encode()).hexdigest()
 
 
 def gerar_tabela_descricoes(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
@@ -74,27 +98,6 @@ def gerar_tabela_descricoes(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         agg_exprs.append(pl.col("lista_unidades").flatten().unique().sort().alias("lista_unids"))
     if "fonte" in cols:
         agg_exprs.append(pl.col("fonte").flatten().unique().sort().alias("lista_fonte"))
-
-    def calcular_moda(lista):
-        if lista is None or len(lista) == 0:
-            return None
-        from collections import Counter
-        # Filtra nulos e vazios
-        limpos = [str(x).strip() for x in lista if x not in (None, "", [])]
-        if not limpos:
-            return None
-        counts = Counter(limpos)
-        max_freq = max(counts.values())
-        candidatos = [val for val, count in counts.items() if count == max_freq]
-        # Desempate: primeiro em ordem alfabética (natural_sort_key seria ideal, mas sorted básico resolve)
-        return sorted(candidatos)[0]
-
-    def gerar_chave_produto(lista_chaves):
-        if lista_chaves is None or (hasattr(lista_chaves, "len") and lista_chaves.len() == 0) or len(lista_chaves) == 0:
-            return ""
-        # Ordena para garantir consistência e gera MD5
-        texto_chaves = "".join(sorted([str(c) for c in lista_chaves]))
-        return hashlib.md5(texto_chaves.encode()).hexdigest()
 
     df_resultado = (
         df.group_by("descricao")
