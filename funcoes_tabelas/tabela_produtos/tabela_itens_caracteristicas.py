@@ -350,29 +350,11 @@ def _ler_bloco_h(path: Path | None) -> pl.DataFrame | None:
 # Função principal
 # ──────────────────────────────────────────────
 
-def gerar_tabela_itens_caracteristicas(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
-    """
-    Gera tabela_itens_caracteristicas_<cnpj>.parquet consolidando NFe, NFCe, C170 e Bloco H.
+import re
 
-    Args:
-        cnpj: CNPJ numérico (14 dígitos).
-        pasta_cnpj: Pasta raiz do CNPJ (padrão: c:/funcoes/CNPJ/<cnpj>).
-
-    Returns:
-        True se gerado com sucesso, False caso contrário.
-    """
-    import re
-    cnpj = re.sub(r"[^0-9]", "", cnpj)
-
-    if pasta_cnpj is None:
-        pasta_cnpj = FUNCOES_DIR / "CNPJ" / cnpj
-
-    arq_dir = pasta_cnpj / "arquivos_parquet"
-
-    rprint(f"\n[bold cyan]Gerando tabela_itens_caracteristicas para CNPJ: {cnpj}[/bold cyan]")
-
+def _ler_fontes_empilhadas(cnpj: str, pasta_cnpj: "Path", arq_dir: "Path") -> "pl.DataFrame | None":
     # ── 1. Localiza arquivos via encontrar_arquivo ──
-    def _resolver(prefixo: str) -> Path | None:
+    def _resolver(prefixo: str) -> "Path | None":
         """Busca o parquet em arquivos_parquet/ e depois na raiz do CNPJ."""
         for diretorio in (arq_dir, pasta_cnpj):
             if diretorio.exists():
@@ -430,7 +412,7 @@ def gerar_tabela_itens_caracteristicas(cnpj: str, pasta_cnpj: Path | None = None
 
     if not fragmentos:
         rprint("[red]❌ Nenhuma fonte disponível. Abortando.[/red]")
-        return False
+        return None
 
     # ── 5. Empilha todas as fontes ───────────────────────
     df_total = pl.concat(fragmentos, how="diagonal_relaxed")
@@ -447,7 +429,9 @@ def gerar_tabela_itens_caracteristicas(cnpj: str, pasta_cnpj: Path | None = None
         df_total = df_total.with_columns(pl.col("ano").fill_null(ano_base).cast(pl.String))
 
     rprint(f"[cyan]  Total de linhas empilhadas: {len(df_total):,}[/cyan]")
+    return df_total
 
+def _processar_e_deduplicar(df_total: "pl.DataFrame") -> "pl.DataFrame":
     # ── 6. Gera chave MD5 ────────────────────────────────
     df_total = _gerar_chave(df_total)
 
@@ -490,6 +474,34 @@ def gerar_tabela_itens_caracteristicas(cnpj: str, pasta_cnpj: Path | None = None
     )
 
     rprint(f"[bold green]  {len(df_resultado):,} itens únicos encontrados.[/bold green]")
+    return df_resultado
+
+def gerar_tabela_itens_caracteristicas(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
+    """
+    Gera tabela_itens_caracteristicas_<cnpj>.parquet consolidando NFe, NFCe, C170 e Bloco H.
+
+    Args:
+        cnpj: CNPJ numérico (14 dígitos).
+        pasta_cnpj: Pasta raiz do CNPJ (padrão: c:/funcoes/CNPJ/<cnpj>).
+
+    Returns:
+        True se gerado com sucesso, False caso contrário.
+    """
+    import re
+    cnpj = re.sub(r"[^0-9]", "", cnpj)
+
+    if pasta_cnpj is None:
+        pasta_cnpj = FUNCOES_DIR / "CNPJ" / cnpj
+
+    arq_dir = pasta_cnpj / "arquivos_parquet"
+
+    rprint(f"\n[bold cyan]Gerando tabela_itens_caracteristicas para CNPJ: {cnpj}[/bold cyan]")
+
+    df_total = _ler_fontes_empilhadas(cnpj, pasta_cnpj, arq_dir)
+    if df_total is None:
+        return False
+
+    df_resultado = _processar_e_deduplicar(df_total)
 
     # ── 6. Salva tabela original ─────────────────────────
     pasta_saida = pasta_cnpj / "analises" / "produtos"
@@ -509,6 +521,7 @@ def gerar_tabela_itens_caracteristicas(cnpj: str, pasta_cnpj: Path | None = None
     ok_sefin = co_sefin(cnpj, pasta_cnpj)
 
     return ok and ok_norm and ok_sefin
+
 
 
 # ──────────────────────────────────────────────
