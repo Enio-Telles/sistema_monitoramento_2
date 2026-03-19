@@ -161,23 +161,6 @@ def ler_fatores_manuais(arquivo_excel: Path) -> pl.DataFrame | None:
         print(f"Erro ao ler planilha de fatores manuais ({arquivo_excel}): {e}")
         return None
 
-def _escolher_fator_mais_redondo(fator_ent, fator_sai):
-    """
-    Quando ambos os fatores (entrada e saída) existem,
-    seleciona o mais próximo de um valor 'redondo' (inteiro ou fração simples).
-    """
-    import math
-    if fator_ent is None or fator_ent == 0 or math.isnan(fator_ent) or math.isinf(fator_ent):
-        return fator_sai if (fator_sai is not None and not math.isnan(fator_sai) and not math.isinf(fator_sai)) else None
-    if fator_sai is None or fator_sai == 0 or math.isnan(fator_sai) or math.isinf(fator_sai):
-        return fator_ent
-
-    # Distância ao inteiro mais próximo
-    dist_ent = abs(fator_ent - round(fator_ent))
-    dist_sai = abs(fator_sai - round(fator_sai))
-    return fator_ent if dist_ent <= dist_sai else fator_sai
-
-
 def _agrupar_por_produto(df_vols: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Agrupa por produto e unidade (período inteiro). Elege Unid Ref pela maior soma de quantidades."""
     df_aggr = (
@@ -279,17 +262,27 @@ def _calcular_fator_final(df_fator: pl.DataFrame, df_aggr: pl.DataFrame) -> pl.D
           .alias("_fator_sai"),
     ])
 
-    # Selecionar o fator mais adequado usando map_elements
+    # Selecionar o fator mais adequado usando expressões nativas do Polars (vetorizado)
+    ent_valid = pl.col("_fator_ent").is_not_null() & (pl.col("_fator_ent") != 0.0) & ~pl.col("_fator_ent").is_nan() & ~pl.col("_fator_ent").is_infinite()
+    sai_valid = pl.col("_fator_sai").is_not_null() & (pl.col("_fator_sai") != 0.0) & ~pl.col("_fator_sai").is_nan() & ~pl.col("_fator_sai").is_infinite()
+
+    dist_ent = (pl.col("_fator_ent") - pl.col("_fator_ent").round(0)).abs()
+    dist_sai = (pl.col("_fator_sai") - pl.col("_fator_sai").round(0)).abs()
+
+    fator_escolhido = (
+        pl.when(~ent_valid & sai_valid).then(pl.col("_fator_sai"))
+        .when(ent_valid & ~sai_valid).then(pl.col("_fator_ent"))
+        .when(ent_valid & sai_valid).then(
+            pl.when(dist_ent <= dist_sai).then(pl.col("_fator_ent"))
+            .otherwise(pl.col("_fator_sai"))
+        )
+        .otherwise(pl.lit(None))
+    )
+
     df_final = df_final.with_columns(
         pl.when(pl.col("unidade") == pl.col("unid_padrao"))
           .then(pl.lit(1.0))
-          .otherwise(
-              pl.struct(["_fator_ent", "_fator_sai"])
-                .map_elements(
-                    lambda s: _escolher_fator_mais_redondo(s["_fator_ent"], s["_fator_sai"]),
-                    return_dtype=pl.Float64
-                )
-          )
+          .otherwise(fator_escolhido)
           .alias("fator_de_conversao")
     )
 

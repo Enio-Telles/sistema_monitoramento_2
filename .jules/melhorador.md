@@ -1,0 +1,3 @@
+## 2024-03-19 - Removed Python iterations (map_elements) from Polars expressions
+**Learning:** Polars `map_elements` is slow because it breaks out of the Rust engine and runs row-by-row in Python, subject to GIL and overhead. We found an instance of this in `_calcular_fator_final` of `funcoes_tabelas/tabela_produtos/fator_conversao.py`, where `_escolher_fator_mais_redondo` was being applied via `map_elements`.
+**Action:** Replace `map_elements` with native Polars expressions (using `when().then().otherwise()` chains) to keep computations inside the Rust engine, maximizing performance and taking advantage of vectorization.
