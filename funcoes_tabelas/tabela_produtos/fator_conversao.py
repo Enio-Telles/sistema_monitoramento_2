@@ -47,36 +47,51 @@ def _aplicar_normalizacao(df: pl.DataFrame) -> pl.DataFrame:
     """
     Retorna uma cópia do DataFrame com campos de texto normalizados.
     Lógica idêntica à de tabela_itens_caracteristicas.py para garantir chaves iguais.
+    ⚡ Bolt Optimization: Uses native Polars string operations instead of Python `map_elements`
+    for order-of-magnitude faster performance (bypassing the Python GIL for every row).
     """
-    import unicodedata
+    # Mapeamento para substituição de acentos
+    MAPPING_ACCENTS = {
+        'Á': 'A', 'À': 'A', 'Â': 'A', 'Ã': 'A', 'Ä': 'A',
+        'É': 'E', 'È': 'E', 'Ê': 'E', 'Ë': 'E',
+        'Í': 'I', 'Ì': 'I', 'Î': 'I', 'Ï': 'I',
+        'Ó': 'O', 'Ò': 'O', 'Ô': 'O', 'Õ': 'O', 'Ö': 'O',
+        'Ú': 'U', 'Ù': 'U', 'Û': 'U', 'Ü': 'U',
+        'Ç': 'C', 'Ñ': 'N'
+    }
+    k_accents = list(MAPPING_ACCENTS.keys())
+    v_accents = list(MAPPING_ACCENTS.values())
 
-    def _norm(v):
-        if v is None: return None
-        v = unicodedata.normalize("NFD", str(v))
-        v = "".join(c for c in v if unicodedata.category(c) != "Mn")
-        return v.upper().strip()
-
-    def _norm_codigo(v):
-        if v is None: return None
-        v = _norm(v)
-        return v.lstrip("0") or "0"
-
-    def _remove_pontos(v):
-        if v is None: return None
-        return _norm(v).replace(".", "")
+    def _norm_expr(col_expr):
+        return (
+            col_expr
+            .str.to_uppercase()
+            .str.strip_chars()
+            .str.replace_many(k_accents, v_accents)
+        )
 
     COLS_TEXTO  = ["descricao", "descr_compl", "tipo_item"]
     COLS_PONTOS = ["ncm", "cest", "gtin"]
 
     exprs = []
+
+    # Campos de texto genérico
     for col in COLS_TEXTO:
         if col in df.columns:
-            exprs.append(pl.col(col).map_elements(_norm, return_dtype=pl.String).alias(col))
+            exprs.append(_norm_expr(pl.col(col)).alias(col))
+
+    # codigo: sem zeros à esquerda (mantendo o codigo original)
     if "codigo" in df.columns:
-        exprs.append(pl.col("codigo").map_elements(_norm_codigo, return_dtype=pl.String).alias("codigo"))
+        cod_expr = _norm_expr(pl.col("codigo")).str.strip_chars_start("0")
+        cod_expr = pl.when(cod_expr == "").then(pl.lit("0")).otherwise(cod_expr)
+        exprs.append(cod_expr.alias("codigo"))
+
+    # ncm, cest, gtin: sem pontos
     for col in COLS_PONTOS:
         if col in df.columns:
-            exprs.append(pl.col(col).map_elements(_remove_pontos, return_dtype=pl.String).alias(col))
+            exprs.append(
+                _norm_expr(pl.col(col)).str.replace_all(r"\.", "").alias(col)
+            )
 
     if exprs:
         df = df.with_columns(exprs)

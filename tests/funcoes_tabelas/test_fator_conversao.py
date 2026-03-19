@@ -48,12 +48,12 @@ def test_ler_fatores_manuais_success(tmp_path, monkeypatch):
     fake_path = tmp_path / "fatores.xlsx"
     fake_path.touch() # Make it "exist"
 
-    # Create valid polars dataframe
+    # Create valid polars dataframe with original excel column names
     df_valid = pl.DataFrame({
-        "chave_produto": ["123", "456"],
-        "unidade": ["UN", "KG"],
+        "codigo_produto_ajustado": ["123", "456"],
+        "unid": ["UN", "KG"],
         "ano": ["2023", "2023"],
-        "fator_conversao_manual": [1.5, 2.0],
+        "fator": [1.5, 2.0],
         "justificativa": ["teste 1", "teste 2"]
     })
 
@@ -63,8 +63,8 @@ def test_ler_fatores_manuais_success(tmp_path, monkeypatch):
     result = ler_fatores_manuais(fake_path)
 
     assert result is not None
-    assert result.shape == (2, 5) # Note that justificativa wasn't dropped in the current implementation
-    assert list(result.columns) == ["chave_produto", "unidade", "ano", "fator_conversao_manual", "justificativa"]
+    assert result.shape == (2, 4)
+    assert list(result.columns) == ["ano", "chave_produto", "unidade", "fator_conversao_manual"]
     assert result["fator_conversao_manual"][0] == 1.5
 
 def test_ler_fatores_manuais_missing_column(tmp_path, monkeypatch):
