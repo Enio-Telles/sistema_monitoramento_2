@@ -22,10 +22,27 @@ def test_co_sefin_missing_target_files(mocker):
 
     mocker.patch.object(Path, "exists", side_effect=mock_exists, autospec=True)
 
+    # Mock polars.scan_parquet for the reference files to avoid filesystem access
+    df_ref_cn = pl.DataFrame(schema={"it_nu_cest": pl.String, "it_nu_ncm": pl.String, "it_co_sefin": pl.String})
+    df_ref_c = pl.DataFrame(schema={"cest": pl.String, "co-sefin": pl.String})
+    df_ref_n = pl.DataFrame(schema={"ncm": pl.String, "co-sefin": pl.String})
+
+    def mock_scan_parquet(source):
+        source_str = str(source)
+        if "sitafe_cest_ncm.parquet" in source_str:
+            return df_ref_cn.lazy()
+        elif "sitafe_cest.parquet" in source_str:
+            return df_ref_c.lazy()
+        elif "sitafe_ncm.parquet" in source_str:
+            return df_ref_n.lazy()
+        else:
+            return pl.DataFrame().lazy()
+
+    mocker.patch("polars.scan_parquet", side_effect=mock_scan_parquet)
+
     # Executar a função e verificar se retorna False
     resultado = co_sefin("12345678901234")
     assert resultado is False
-
 
 def test_co_sefin_happy_path(mocker):
     # Setup DataFrames para os mocks
