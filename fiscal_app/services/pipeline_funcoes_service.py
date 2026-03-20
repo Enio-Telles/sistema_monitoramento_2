@@ -280,7 +280,7 @@ class ServicoTabelas:
         geradas: list[str] = []
 
         # Ordem de execução (respeita dependências)
-        ordem = ["tabela_itens_caracteristicas", "tabela_descricoes", "tabela_codigos", "fator_conversao"]
+        ordem = ["produtos_unidades", "produtos", "produtos_agrupados", "fatores_conversao"]
 
         for tab_id in ordem:
             if tab_id not in tabelas_selecionadas:
@@ -315,8 +315,7 @@ def _importar_funcao_tabela(nome_modulo: str, nome_funcao: str) -> Callable:
 
     modulo = importlib.import_module(nome_modulo)
     # Correção: tabela_codigos usa nome diferente
-    if nome_funcao == "gerar_tabela_codigos":
-        nome_funcao = "tabela_codigos_mais_descricoes"
+
     return getattr(modulo, nome_funcao)
 
 
