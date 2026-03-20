@@ -4,7 +4,6 @@ Objetivo: Calcular a relação entre diferentes unidades de medida do mesmo prod
 """
 import sys
 from pathlib import Path
-import unicodedata
 import polars as pl
 import logging
 from rich import print as rprint
@@ -24,12 +23,6 @@ except ImportError:
         pasta.mkdir(parents=True, exist_ok=True)
         df.write_parquet(pasta / nome)
         return True
-
-def _normalizar_texto(v: str | None) -> str | None:
-    if not v: return None
-    v = unicodedata.normalize("NFD", str(v))
-    v = "".join(c for c in v if unicodedata.category(c) != "Mn")
-    return " ".join(v.upper().strip().split())
 
 def _determinar_unid_ref(df_unidades: pl.DataFrame, desc_norm: str) -> str | None:
     df_filtrado = df_unidades.filter(pl.col("descricao_normalizada") == desc_norm)
@@ -94,8 +87,20 @@ def gerar_fatores_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> pl.Dat
     df_unidades = pl.read_parquet(arq_unidades)
 
     # Normaliza descrições para garantir cruzamento e determinação correta
+    # Performance optimization:
+    # Use native Polars expressions instead of .map_elements() for text normalization.
+    # This avoids the Python GIL and allows vectorization, drastically improving performance.
     df_unidades = df_unidades.with_columns([
-        pl.col("descricao").map_elements(_normalizar_texto, return_dtype=pl.String).alias("descricao_normalizada")
+        pl.col("descricao")
+        .str.to_uppercase()
+        .str.replace_many(
+            ['Á','À','Â','Ã','Ä','É','È','Ê','Ë','Í','Ì','Î','Ï','Ó','Ò','Ô','Õ','Ö','Ú','Ù','Û','Ü','Ç','Ñ'],
+            ['A','A','A','A','A','E','E','E','E','I','I','I','I','O','O','O','O','O','U','U','U','U','C','N']
+        )
+        .str.replace_all(r"\s+", " ")
+        .str.strip_chars()
+        .replace("", None)
+        .alias("descricao_normalizada")
     ])
 
     arq_produtos = pasta_produtos / f"produtos_{cnpj}.parquet"
