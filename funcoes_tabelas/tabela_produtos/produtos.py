@@ -4,7 +4,6 @@ Objetivo: Gerar a tabela de produtos normalizados e únicos.
 """
 import sys
 from pathlib import Path
-import unicodedata
 import polars as pl
 from rich import print as rprint
 
@@ -21,12 +20,6 @@ except ImportError:
         pasta.mkdir(parents=True, exist_ok=True)
         df.write_parquet(pasta / nome)
         return True
-
-def _normalizar_texto(v: str | None) -> str | None:
-    if not v: return None
-    v = unicodedata.normalize("NFD", str(v))
-    v = "".join(c for c in v if unicodedata.category(c) != "Mn")
-    return " ".join(v.upper().strip().split())
 
 def gerar_tabela_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> pl.DataFrame | None:
     import re
@@ -47,8 +40,20 @@ def gerar_tabela_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> pl.DataF
     if df.is_empty():
         return None
 
+    # Performance optimization:
+    # Use native Polars expressions instead of .map_elements() for text normalization.
+    # This avoids the Python GIL and allows vectorization, drastically improving performance.
     df = df.with_columns([
-        pl.col("descricao").map_elements(_normalizar_texto, return_dtype=pl.String).alias("descricao_normalizada")
+        pl.col("descricao")
+        .str.to_uppercase()
+        .str.replace_many(
+            ['Á','À','Â','Ã','Ä','É','È','Ê','Ë','Í','Ì','Î','Ï','Ó','Ò','Ô','Õ','Ö','Ú','Ù','Û','Ü','Ç','Ñ'],
+            ['A','A','A','A','A','E','E','E','E','I','I','I','I','O','O','O','O','O','U','U','U','U','C','N']
+        )
+        .str.replace_all(r"\s+", " ")
+        .str.strip_chars()
+        .replace("", None)
+        .alias("descricao_normalizada")
     ])
 
     df_agrupado = (

@@ -1,0 +1,3 @@
+## 2024-05-18 - [Optimizing Text Normalization with Polars Native Methods]
+**Learning:** Polars `.map_elements()` is significantly slower than using native Polars expressions (such as `.str.to_uppercase()`, `.str.replace_many()`, and `.str.strip_chars()`) because `.map_elements()` triggers Python loops and suffers from GIL overhead, bypassing vectorization optimizations. In a test dataset of 1 million records, execution went from ~10.17 seconds down to ~0.35 seconds when translated to native expressions.
+**Action:** Replace `map_elements` for simple string transformations with native `polars.Expr.str.*` functions wherever applicable across the codebase, particularly where it handles text normalization like `_normalizar_texto`.
