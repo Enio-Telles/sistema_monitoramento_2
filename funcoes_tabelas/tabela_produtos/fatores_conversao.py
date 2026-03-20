@@ -25,12 +25,6 @@ except ImportError:
         df.write_parquet(pasta / nome)
         return True
 
-def _normalizar_texto(v: str | None) -> str | None:
-    if not v: return None
-    v = unicodedata.normalize("NFD", str(v))
-    v = "".join(c for c in v if unicodedata.category(c) != "Mn")
-    return " ".join(v.upper().strip().split())
-
 def _determinar_unid_ref(df_unidades: pl.DataFrame, desc_norm: str) -> str | None:
     df_filtrado = df_unidades.filter(pl.col("descricao_normalizada") == desc_norm)
     if df_filtrado.is_empty():
@@ -95,7 +89,17 @@ def gerar_fatores_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> pl.Dat
 
     # Normaliza descrições para garantir cruzamento e determinação correta
     df_unidades = df_unidades.with_columns([
-        pl.col("descricao").map_elements(_normalizar_texto, return_dtype=pl.String).alias("descricao_normalizada")
+        pl.col("descricao")
+        .str.to_uppercase()
+        .str.replace_all(r"[ÁÀÂÃÄ]", "A")
+        .str.replace_all(r"[ÉÈÊË]", "E")
+        .str.replace_all(r"[ÍÌÎÏ]", "I")
+        .str.replace_all(r"[ÓÒÔÕÖ]", "O")
+        .str.replace_all(r"[ÚÙÛÜ]", "U")
+        .str.replace_all(r"[Ç]", "C")
+        .str.strip_chars()
+        .str.replace_all(r"\s+", " ")
+        .alias("descricao_normalizada")
     ])
 
     arq_produtos = pasta_produtos / f"produtos_{cnpj}.parquet"
